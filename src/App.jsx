@@ -117,8 +117,8 @@ header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;al
 .adhoc-item{background:var(--surface);border:1px solid rgba(232,200,74,0.2);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;}
 .remove-btn{font-family:var(--mono);font-size:0.65rem;color:var(--red);cursor:pointer;padding:2px 4px;flex-shrink:0;opacity:0.7;}
 .remove-btn:hover{opacity:1;}
-.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;opacity:0;transition:opacity 0.2s;}
-.drawer-overlay.open{opacity:1;}
+.drawer-overlay{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:200;opacity:0;transition:opacity 0.2s;pointer-events:none;}
+.drawer-overlay.open{opacity:1;pointer-events:all;}
 .drawer{position:fixed;right:0;top:0;bottom:0;width:420px;background:var(--surface);border-left:1px solid var(--border);z-index:201;transform:translateX(100%);transition:transform 0.25s ease;display:flex;flex-direction:column;}
 .drawer.open{transform:translateX(0);}
 .drawer-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;}
