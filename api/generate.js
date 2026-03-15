@@ -193,7 +193,7 @@ async function deepScrapeSource(source) {
     const links = extractLinks(html, source.url)
     const articlesToFetch = links
       .filter(l => l.text.length > 20)
-      .slice(0, 4)
+      .slice(0, 6)
 
     const articleFetches = await Promise.allSettled(
       articlesToFetch.map(async (link) => {
