@@ -111,8 +111,14 @@ async function fetchEmailsFromSender(accessToken, sender) {
           body += Buffer.from(part.body.data, 'base64').toString('utf-8')
         } else if (part?.mimeType === 'text/html' && part?.body?.data && !body) {
           // Fall back to HTML if no plain text
-          const html = Buffer.from(part.body.data, 'base64').toString('utf-8')
-          body += html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+         const html = Buffer.from(part.body.data, 'base64').toString('utf-8')
+        body += html
+          .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+          .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+          .replace(/<!--[\s\S]*?-->/g, '')
+          .replace(/<[^>]+>/g, ' ')
+          .replace(/\s+/g, ' ')
+          .trim()
         } else if (part?.parts) {
           extractBody(part.parts)
         }
