@@ -1,5 +1,5 @@
 const SCRAPE_SOURCES = [
-  { name: "OpenAI News", url: "https://openai.com/news" },
+  { name: "OpenAI News", url: "https://openai.com/blog/rss.xml" },
   { name: "Anthropic News", url: "https://www.anthropic.com/news" },
   { name: "Google Gemini Blog", url: "https://blog.google/products-and-platforms/products/gemini/" },
   { name: "TechCrunch AI", url: "https://techcrunch.com/tag/artificial-intelligence/" },
