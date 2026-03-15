@@ -141,7 +141,7 @@ async function fetchEmailsFromSender(accessToken, sender) {
       .trim()
       .substring(0, 2000)
 
-    if (!cleanBody || cleanBody.length < 50) return null
+    if (!cleanBody || cleanBody.length < 10) return null
 
     return {
       sender: sender.name,
