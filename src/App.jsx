@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 const WEB_SOURCES = [
   {name:"TechCrunch AI",   url:"techcrunch.com/tag/artificial-intelligence", type:"news",      badge:"free",    on:true},
@@ -27,10 +27,10 @@ const GMAIL_SOURCES = [
 ]
 
 const SAMPLE_ARCHIVES = [
-  {date:"3/13/26", title:"EP 072 · Daily Brief — 3/13/26", brief:"OpenAI's latest model update quietly outperformed expectations on reasoning benchmarks — and the pricing signal is what matters most. Meanwhile Google pushed a Gemini update that went under the radar but has serious implications for enterprise search...", sources:8},
-  {date:"3/12/26", title:"EP 071 · Daily Brief — 3/12/26", brief:"The a16z AI report dropped and the headline is enterprise adoption acceleration — 60% of Fortune 500 now have AI in production, up from 35% a year ago. The laggards are running out of excuses and time...", sources:11},
-  {date:"3/11/26", title:"EP 070 · Daily Brief — 3/11/26", brief:"Anthropic's constitutional AI paper got a quiet update and the research community noticed. The implications for alignment are significant and largely being undercovered by mainstream tech press...", sources:9},
-  {date:"3/10/26", title:"EP 069 · Daily Brief — 3/10/26", brief:"Three AI acquisitions closed in 48 hours — all sub-$500M, all infrastructure plays. The consolidation layer is forming faster than the application layer and that tells you everything about where smart money thinks value accrues...", sources:7},
+  {date:"3/13/26", title:"EP 072 · Daily Brief — 3/13/26", brief:"OpenAI's latest model update quietly outperformed expectations on reasoning benchmarks...", sources:8},
+  {date:"3/12/26", title:"EP 071 · Daily Brief — 3/12/26", brief:"The a16z AI report dropped and the headline is enterprise adoption acceleration...", sources:11},
+  {date:"3/11/26", title:"EP 070 · Daily Brief — 3/11/26", brief:"Anthropic's constitutional AI paper got a quiet update and the research community noticed...", sources:9},
+  {date:"3/10/26", title:"EP 069 · Daily Brief — 3/10/26", brief:"Three AI acquisitions closed in 48 hours — all sub-$500M, all infrastructure plays...", sources:7},
 ]
 
 const BADGE_CLASS = {free:"badge-free", partial:"badge-partial", gmail:"badge-gmail"}
@@ -42,7 +42,7 @@ const styles = `
 :root{
   --bg:#0f0f0f;--surface:#181818;--surface2:#212121;--border:rgba(255,255,255,0.07);
   --border2:rgba(255,255,255,0.14);--accent:#e8c84a;--accent-dim:rgba(232,200,74,0.1);
-  --text:#f0ede6;--muted:rgba(240,237,230,0.42);--green:#5cb85c;--red:#e05b4b;
+  --text:#f0ede6;--muted:rgba(240,237,230,0.42);--green:#5cb85c;--red:#e05b4b;--blue:#6495ed;
   --mono:'DM Mono',monospace;--serif:'Playfair Display',serif;--sans:'DM Sans',sans-serif;
 }
 body{background:var(--bg);color:var(--text);font-family:var(--sans);margin:0;}
@@ -83,6 +83,13 @@ header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;al
 .btn-small{background:var(--surface2);border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:0.68rem;padding:6px 12px;cursor:pointer;transition:border-color 0.15s,color 0.15s;width:100%;margin-top:6px;letter-spacing:0.05em;}
 .btn-small:hover{border-color:var(--accent);color:var(--accent);}
 .hint{font-family:var(--mono);font-size:0.6rem;color:var(--muted);line-height:1.6;margin-top:6px;}
+.gmail-connect{margin:8px 0;background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:12px;display:flex;flex-direction:column;gap:8px;}
+.gmail-status{font-family:var(--mono);font-size:0.68rem;display:flex;align-items:center;gap:6px;}
+.gmail-status.connected{color:var(--green);}
+.gmail-status.disconnected{color:var(--muted);}
+.btn-gmail{background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--text);font-family:var(--mono);font-size:0.68rem;padding:7px 12px;cursor:pointer;transition:all 0.15s;letter-spacing:0.05em;text-align:center;}
+.btn-gmail:hover{border-color:var(--blue);color:var(--blue);}
+.btn-gmail.connected{border-color:rgba(92,184,92,0.3);color:var(--green);}
 .tone-row{padding:1rem;border-top:1px solid var(--border);margin-top:auto;}
 .tone-select{width:100%;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:7px 10px;font-family:var(--sans);font-size:0.8rem;color:var(--text);outline:none;cursor:pointer;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='rgba(255,255,255,0.3)'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 10px center;background-color:var(--surface);padding-right:28px;}
 .tone-select option{background:#1e1e1e;}
@@ -105,7 +112,6 @@ header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;al
 .panel-badge{font-family:var(--mono);font-size:0.65rem;background:var(--accent-dim);color:var(--accent);padding:2px 8px;border-radius:99px;}
 .panel-body{padding:1.25rem;min-height:120px;font-size:0.88rem;line-height:1.8;color:var(--text);}
 .panel-body.empty{color:var(--muted);font-style:italic;}
-.panel-body.generating{color:var(--muted);}
 .export-row{display:flex;gap:8px;align-items:center;padding:1rem 2rem;border-top:1px solid var(--border);flex-wrap:wrap;}
 .export-label{font-family:var(--mono);font-size:0.65rem;color:var(--muted);letter-spacing:0.1em;text-transform:uppercase;margin-right:4px;}
 .btn-export{background:transparent;border:1px solid var(--border2);border-radius:6px;color:var(--muted);font-family:var(--mono);font-size:0.68rem;padding:6px 14px;cursor:pointer;transition:all 0.15s;letter-spacing:0.04em;}
@@ -114,6 +120,7 @@ header{padding:1rem 1.5rem;border-bottom:1px solid var(--border);display:flex;al
 .btn-export.primary{border-color:rgba(232,200,74,0.4);color:var(--accent);}
 .btn-export.primary:hover{background:var(--accent-dim);}
 .error-bar{background:rgba(224,91,75,0.1);border:1px solid rgba(224,91,75,0.3);border-radius:8px;padding:0.75rem 1rem;font-family:var(--mono);font-size:0.75rem;color:var(--red);margin:0 2rem;}
+.success-bar{background:rgba(92,184,92,0.1);border:1px solid rgba(92,184,92,0.3);border-radius:8px;padding:0.75rem 1rem;font-family:var(--mono);font-size:0.75rem;color:var(--green);margin:0 2rem;}
 .adhoc-item{background:var(--surface);border:1px solid rgba(232,200,74,0.2);border-radius:8px;padding:7px 10px;display:flex;align-items:center;gap:8px;}
 .remove-btn{font-family:var(--mono);font-size:0.65rem;color:var(--red);cursor:pointer;padding:2px 4px;flex-shrink:0;opacity:0.7;}
 .remove-btn:hover{opacity:1;}
@@ -146,6 +153,7 @@ export default function App() {
   const [notebooklm, setNotebooklm] = useState('')
   const [generating, setGenerating] = useState(false)
   const [error, setError] = useState('')
+  const [success, setSuccess] = useState('')
   const [copied, setCopied] = useState('')
   const [drawerOpen, setDrawerOpen] = useState(false)
   const [archives, setArchives] = useState(SAMPLE_ARCHIVES)
@@ -153,6 +161,7 @@ export default function App() {
   const [gmailInput, setGmailInput] = useState('')
   const [adhocUrl, setAdhocUrl] = useState('')
   const [adhocText, setAdhocText] = useState('')
+  const [gmailConnected, setGmailConnected] = useState(false)
 
   const now = new Date()
   const dateStr = now.toLocaleDateString('en-US', {month:'numeric', day:'numeric', year:'2-digit'})
@@ -163,23 +172,69 @@ export default function App() {
   const activeWebCount = webSources.filter(s => s.on).length
   const activeGmailCount = gmailSources.filter(s => s.on).length
 
+  // Check Gmail connection status on load
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('gmail') === 'connected') {
+      setGmailConnected(true)
+      setSuccess('Gmail connected successfully!')
+      setTimeout(() => setSuccess(''), 4000)
+      window.history.replaceState({}, '', '/')
+    } else if (params.get('gmail') === 'error') {
+      setError('Gmail connection failed. Please try again.')
+      setTimeout(() => setError(''), 4000)
+      window.history.replaceState({}, '', '/')
+    }
+    // Check cookie existence via a test call
+    fetch('/api/gmail', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ senders: [] })
+    }).then(r => r.json()).then(data => {
+      if (!data.needsAuth) setGmailConnected(true)
+    }).catch(() => {})
+  }, [])
+
   async function generate() {
     setGenerating(true)
     setError('')
     setBrief('')
     setNotebooklm('')
+
+    // Fetch Gmail content if connected
+    let emailContent = []
+    if (gmailConnected) {
+      try {
+        const activeSenders = gmailSources.filter(s => s.on)
+        const gmailRes = await fetch('/api/gmail', {
+          method: 'POST',
+          headers: {'Content-Type': 'application/json'},
+          body: JSON.stringify({ senders: activeSenders })
+        })
+        const gmailData = await gmailRes.json()
+        if (gmailData.emails) emailContent = gmailData.emails
+        if (gmailData.needsAuth) setGmailConnected(false)
+      } catch(e) {
+        console.error('Gmail fetch failed:', e)
+      }
+    }
+
     try {
       const res = await fetch('/api/generate', {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({sources: webSources, gmailSources, adhocItems, tone})
+        body: JSON.stringify({
+          sources: webSources,
+          gmailSources,
+          gmailContent: emailContent,
+          adhocItems,
+          tone
+        })
       })
       const data = await res.json()
       if (!res.ok) throw new Error(data.error || 'Generation failed')
       setBrief(data.brief)
       setNotebooklm(data.notebooklm)
-      const words = data.brief.split(/\s+/).length
-      const mins = Math.round(words / 140)
       setArchives(prev => [{
         date: dateStr,
         title,
@@ -241,9 +296,7 @@ export default function App() {
         </div>
         <div className="header-right">
           <div className="ep-chip">{ep}</div>
-          <button className="btn-archive" onClick={() => setDrawerOpen(true)}>
-            Archives
-          </button>
+          <button className="btn-archive" onClick={() => setDrawerOpen(true)}>Archives</button>
         </div>
       </header>
 
@@ -282,8 +335,20 @@ export default function App() {
 
           {activeTab === 'gmail' && (
             <div className="tab-panel active">
+              <div className="gmail-connect">
+                <div className={`gmail-status ${gmailConnected?'connected':'disconnected'}`}>
+                  {gmailConnected ? '● Gmail connected' : '○ Gmail not connected'}
+                </div>
+                <button
+                  className={`btn-gmail ${gmailConnected?'connected':''}`}
+                  onClick={() => gmailConnected ? null : window.location.href='/api/auth/login'}
+                >
+                  {gmailConnected ? '✓ Connected — newsletters active' : 'Connect Gmail →'}
+                </button>
+                {!gmailConnected && <div className="hint">Connect Gmail to pull live newsletter content at generate time.</div>}
+              </div>
               {gmailSources.map((s,i) => (
-                <div key={i} className={`source-row ${s.on?'on':''}`}>
+                <div key={i} className={`source-row ${s.on?'on':''} ${!gmailConnected?'':''}`}>
                   <div className="src-icon">{s.name.charAt(0)}</div>
                   <div className="src-info">
                     <div className="src-name">
@@ -299,7 +364,6 @@ export default function App() {
                 <div className="field-label">Add newsletter sender</div>
                 <input className="text-input" value={gmailInput} onChange={e=>setGmailInput(e.target.value)} placeholder="sender@domain.com" onKeyDown={e=>e.key==='Enter'&&addGmailSource()} />
                 <button className="btn-small" onClick={addGmailSource}>+ Add Sender</button>
-                <div className="hint">Gmail MCP pulls latest email from each active sender at generate time.</div>
               </div>
             </div>
           )}
@@ -368,16 +432,17 @@ export default function App() {
           </div>
 
           {error && <div className="error-bar">{error}</div>}
+          {success && <div className="success-bar">{success}</div>}
 
           <div className="output-area">
             <div className="panel">
               <div className="panel-header">
                 <div className="panel-title">Editorial Brief</div>
                 <div className="panel-badge">
-                  {brief ? `~${Math.round(brief.split(/\s+/).length/140)} min` : '~3 min'}
+                  {brief ? `~${Math.round(brief.split(/\s+/).length/140)} min` : '~15 min'}
                 </div>
               </div>
-              <div className={`panel-body ${!brief?'empty':''} ${generating?'generating':''}`}>
+              <div className={`panel-body ${!brief?'empty':''}`}>
                 {generating ? 'Generating your briefing...' : brief || 'Your generated briefing will appear here. Configure sources on the left, then hit Generate.'}
               </div>
             </div>
@@ -388,7 +453,7 @@ export default function App() {
                 <div className="panel-badge">ready to paste</div>
               </div>
               <div className={`panel-body ${!notebooklm?'empty':''}`}>
-                {notebooklm || 'A formatted version optimized for NotebookLM will appear here — paste it in to generate your two-host podcast.'}
+                {notebooklm || 'A formatted version optimized for NotebookLM will appear here.'}
               </div>
             </div>
           </div>
@@ -408,7 +473,6 @@ export default function App() {
         </main>
       </div>
 
-      {/* ARCHIVES DRAWER */}
       <div className={`drawer-overlay ${drawerOpen?'open':''}`} onClick={() => setDrawerOpen(false)} />
       <div className={`drawer ${drawerOpen?'open':''}`}>
         <div className="drawer-header">
