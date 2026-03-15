@@ -23,62 +23,129 @@ function getTokensFromCookie(req) {
   }
 }
 
-async function fetchEmailsFromSender(accessToken, senderDomain, maxResults = 1) {
+function scoreEmail(subject, senderUrl) {
+  const s = subject.toLowerCase()
+
+  // NYT specific newsletter detection
+  if (senderUrl.includes('nytimes')) {
+    if (s.startsWith('the morning:')) return 100
+    if (s.startsWith('the evening:')) return 100
+    if (s.startsWith('dealbook:')) return 100
+    return 0 // Skip all other NYT emails
+  }
+
+  // General relevance scoring for other senders
+  const highSignal = ['ai', 'artificial intelligence', 'tech', 'briefing', 'daily', 'morning', 'evening', 'weekly', 'roundup', 'digest', 'startup', 'venture', 'funding', 'acquisition', 'model', 'openai', 'anthropic', 'google', 'microsoft', 'meta', 'apple']
+  const lowSignal = ['recipe', 'cooking', 'food', 'sports', 'fashion', 'beauty', 'lifestyle', 'travel', 'health', 'fitness', 'horoscope', 'sale', 'discount', 'unsubscribe']
+
+  let score = 50 // default
+  for (const word of highSignal) {
+    if (s.includes(word)) score += 20
+  }
+  for (const word of lowSignal) {
+    if (s.includes(word)) score -= 40
+  }
+  return score
+}
+
+async function fetchEmailsFromSender(accessToken, sender) {
   try {
-    const query = encodeURIComponent(`from:${senderDomain} newer_than:2d`)
+    // Build smart search query
+    const domain = sender.url
+      .replace(/^https?:\/\//, '')
+      .replace(/^www\./, '')
+      .split('/')[0]
+
+    // Special cases for known senders with non-obvious domains
+    const searchDomain = sender.name === 'Superhuman AI' ? 'mail.joinsuperhuman.ai' : domain
+
+    const query = encodeURIComponent(`from:${searchDomain} newer_than:3d`)
+    const maxResults = domain.includes('nytimes') ? 20 : 5
+
     const listRes = await fetch(
       `https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${query}&maxResults=${maxResults}`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
     const listData = await listRes.json()
 
-    if (!listData.messages || listData.messages.length === 0) {
-      return null
-    }
+    if (!listData.messages || listData.messages.length === 0) return null
 
-    // Get the most recent message
+    // Fetch metadata for all messages to score by subject
+    const metaFetches = await Promise.all(
+      listData.messages.map(msg =>
+        fetch(
+          `https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}?format=metadata&metadataHeaders=Subject&metadataHeaders=Date`,
+          { headers: { Authorization: `Bearer ${accessToken}` } }
+        ).then(r => r.json())
+      )
+    )
+
+    // Score each email and pick the best one
+    const scored = metaFetches
+      .map(msg => {
+        const headers = msg.payload?.headers || []
+        const subject = headers.find(h => h.name === 'Subject')?.value || ''
+        const date = headers.find(h => h.name === 'Date')?.value || ''
+        const score = scoreEmail(subject, sender.url)
+        return { id: msg.id, subject, date, score }
+      })
+      .filter(m => m.score > 0) // Drop irrelevant emails entirely
+      .sort((a, b) => b.score - a.score)
+
+    if (scored.length === 0) return null
+
+    // Fetch full body of the best scoring email
+    const best = scored[0]
     const msgRes = await fetch(
-      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${listData.messages[0].id}?format=full`,
+      `https://gmail.googleapis.com/gmail/v1/users/me/messages/${best.id}?format=full`,
       { headers: { Authorization: `Bearer ${accessToken}` } }
     )
     const msgData = await msgRes.json()
 
-    // Extract subject
-    const headers = msgData.payload?.headers || []
-    const subject = headers.find(h => h.name === 'Subject')?.value || 'No subject'
-    const date = headers.find(h => h.name === 'Date')?.value || ''
-
     // Extract body text
     let body = ''
-    const parts = msgData.payload?.parts || [msgData.payload]
-
     function extractBody(parts) {
+      if (!parts) return
       for (const part of parts) {
         if (part?.mimeType === 'text/plain' && part?.body?.data) {
           body += Buffer.from(part.body.data, 'base64').toString('utf-8')
+        } else if (part?.mimeType === 'text/html' && part?.body?.data && !body) {
+          // Fall back to HTML if no plain text
+          const html = Buffer.from(part.body.data, 'base64').toString('utf-8')
+          body += html.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
         } else if (part?.parts) {
           extractBody(part.parts)
         }
       }
     }
 
-    extractBody(parts)
+    extractBody(msgData.payload?.parts || [msgData.payload])
 
-    // Clean and truncate
+    // If body is still empty try the payload body directly
+    if (!body && msgData.payload?.body?.data) {
+      body = Buffer.from(msgData.payload.body.data, 'base64').toString('utf-8')
+      if (body.includes('<')) {
+        body = body.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim()
+      }
+    }
+
     const cleanBody = body
       .replace(/https?:\/\/\S+/g, '')
       .replace(/\s+/g, ' ')
       .trim()
-      .substring(0, 1500)
+      .substring(0, 2000)
+
+    if (!cleanBody || cleanBody.length < 50) return null
 
     return {
-      sender: senderDomain,
-      subject,
-      date,
+      sender: sender.name,
+      subject: best.subject,
+      date: best.date,
       body: cleanBody
     }
 
-  } catch {
+  } catch (e) {
+    console.error(`Gmail fetch failed for ${sender.name}:`, e)
     return null
   }
 }
@@ -115,7 +182,7 @@ export default async function handler(req, res) {
 
   // Fetch emails from all senders in parallel
   const results = await Promise.all(
-    senders.map(sender => fetchEmailsFromSender(accessToken, sender.url))
+    senders.map(sender => fetchEmailsFromSender(accessToken, sender))
   )
 
   const emails = results.filter(Boolean)
