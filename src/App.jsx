@@ -174,8 +174,40 @@ export default function App() {
 
   // Check Gmail connection status on load
   useEffect(() => {
-    const params = new URLSearchParams(window.location.search)
-    if (params.get('gmail') === 'connected') {
+  const params = new URLSearchParams(window.location.search)
+  if (params.get('gmail') === 'connected') {
+    setGmailConnected(true)
+    setSuccess('Gmail connected successfully!')
+    setTimeout(() => setSuccess(''), 4000)
+    window.history.replaceState({}, '', '/')
+  } else if (params.get('gmail') === 'error') {
+    setError('Gmail connection failed. Please try again.')
+    setTimeout(() => setError(''), 4000)
+    window.history.replaceState({}, '', '/')
+  }
+
+  // Check Gmail connection
+  fetch('/api/gmail', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({ senders: [] })
+  }).then(r => r.json()).then(data => {
+    if (!data.needsAuth) setGmailConnected(true)
+  }).catch(() => {})
+
+  // Load today's auto-generated brief from Upstash
+  fetch('/api/brief')
+    .then(r => r.json())
+    .then(data => {
+      if (data.brief) {
+        setBrief(data.brief)
+        setNotebooklm(data.notebooklm || '')
+        setSuccess(`Today's brief loaded automatically (${data.date})`)
+        setTimeout(() => setSuccess(''), 4000)
+      }
+    })
+    .catch(() => {})
+}, [])
       setGmailConnected(true)
       setSuccess('Gmail connected successfully!')
       setTimeout(() => setSuccess(''), 4000)
