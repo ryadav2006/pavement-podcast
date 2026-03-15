@@ -294,7 +294,7 @@ CRITICAL RULES — NO EXCEPTIONS:
 10. Every factual claim must come directly from the scraped content above
 11. Do not editorialize with specific examples, names, or events not present in the scraped content — stay within what the articles actually say
 12. Gmail newsletters: only include AI, tech, business strategy, or policy content — skip lifestyle, sports, beauty, entertainment, automotive
-13. TechCrunch content must be directly about AI technology, AI companies, or AI policy — ignore automotive, hardware, cryptocurrency, or general tech business stories unrelated to AI
+13. TechCrunch content must be directly about AI technology, AI companies, or AI policy — ignore automotive, electric vehicles, hardware, cryptocurrency, social media history, robotics unrelated to AI, or any general tech business stories not directly involving AI
 14. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
 
 TONE: ${tone}
