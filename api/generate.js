@@ -157,7 +157,7 @@ CRITICAL RULES:
 7. Always use full names — never abbreviate (e.g. "Pete Hegseth" not "Pete")
 8. If fewer than 3 fresh stories exist, open with "Lighter news day today —"
 9. Every factual claim must be traceable to the content above
-10. Gmail newsletters are real content from today's inbox — treat them as high-signal primary sources
+10. Gmail newsletters are real content from today's inbox — treat them as high-signal primary sources ONLY for stories related to AI, technology, business strategy, or policy. Ignore any newsletter content about lifestyle, sports, entertainment, beauty, or topics unrelated to tech and AI.
 
 TONE: ${tone}
 
