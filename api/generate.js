@@ -292,6 +292,10 @@ CRITICAL RULES — NO EXCEPTIONS:
 8. If fewer than 3 stories are available, open with "Lighter news day today —" and go deeper on what exists
 9. No markdown formatting — no bold, no headers, no asterisks — pure spoken word only
 10. Every factual claim must come directly from the scraped content above
+11. Do not editorialize with specific examples, names, or events not present in the scraped content — stay within what the articles actually say
+12. Gmail newsletters: only include AI, tech, business strategy, or policy content — skip lifestyle, sports, beauty, entertainment, automotive
+13. TechCrunch content must be directly about AI technology, AI companies, or AI policy — ignore automotive, hardware, cryptocurrency, or general tech business stories unrelated to AI
+14. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
 
 TONE: ${tone}
 
