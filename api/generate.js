@@ -272,11 +272,11 @@ export default async function handler(req, res) {
 
 TODAY: ${today}
 
+LIVE GMAIL NEWSLETTERS — HIGH PRIORITY, READ FIRST:
+${gmailContentFormatted || 'GMAIL: Not connected or no recent newsletters.'}
+
 LIVE SCRAPED WEB CONTENT:
 ${scrapedContent || 'No fresh web content found today.'}
-
-${gmailContentFormatted ? `LIVE GMAIL NEWSLETTERS:\n${gmailContentFormatted}` : 'GMAIL: Not connected or no recent newsletters.'}
-
 ${adhocList ? `AD HOC ITEMS:\n${adhocList}` : ''}
 
 ${failedSources.length > 0 ? `SOURCES WITH NO FRESH CONTENT TODAY: ${failedSources.join(', ')}` : ''}
@@ -287,16 +287,14 @@ CRITICAL RULES — NO EXCEPTIONS:
 3. If an article gives partial information, report only what it says — do not interpret using outside knowledge
 4. Never invent names, numbers, dates, or product details not explicitly in the content
 5. Always use full names exactly as they appear in the content
-6. Gmail newsletters: only include AI, tech, business strategy, or policy content — skip lifestyle, sports, beauty, entertainment
-7. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
-8. If fewer than 3 stories are available, open with "Lighter news day today —" and go deeper on what exists
-9. No markdown formatting — no bold, no headers, no asterisks — pure spoken word only
-10. Every factual claim must come directly from the scraped content above
-11. Do not editorialize with specific examples, names, or events not present in the scraped content — stay within what the articles actually say
-12. Gmail newsletters: only include AI, tech, business strategy, or policy content — skip lifestyle, sports, beauty, entertainment, automotive
+6. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
+7. If fewer than 3 stories are available, open with "Lighter news day today —" and go deeper on what exists
+8. No markdown formatting — no bold, no headers, no asterisks — pure spoken word only
+9. Every factual claim must come directly from the scraped content above
+10. Do not editorialize with specific examples, names, or events not present in the scraped content — stay within what the articles actually say
+11. Gmail newsletter content is HIGH PRIORITY — include at least 2-3 stories from newsletters if they contain relevant AI/tech content
+12. Only include newsletter or web content related to AI, tech, business strategy, or policy — skip lifestyle, sports, beauty, entertainment, automotive, social media history
 13. TechCrunch content must be directly about AI technology, AI companies, or AI policy — ignore automotive, electric vehicles, hardware, cryptocurrency, social media history, robotics unrelated to AI, or any general tech business stories not directly involving AI
-14. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
-
 TONE: ${tone}
 
 FORMAT — TARGET 15-20 MINUTES SPOKEN (~2000-2500 words):
