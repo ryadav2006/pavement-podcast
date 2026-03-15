@@ -207,24 +207,6 @@ export default function App() {
       }
     })
     .catch(() => {})
-}, [])
-      setGmailConnected(true)
-      setSuccess('Gmail connected successfully!')
-      setTimeout(() => setSuccess(''), 4000)
-      window.history.replaceState({}, '', '/')
-    } else if (params.get('gmail') === 'error') {
-      setError('Gmail connection failed. Please try again.')
-      setTimeout(() => setError(''), 4000)
-      window.history.replaceState({}, '', '/')
-    }
-    // Check cookie existence via a test call
-    fetch('/api/gmail', {
-      method: 'POST',
-      headers: {'Content-Type': 'application/json'},
-      body: JSON.stringify({ senders: [] })
-    }).then(r => r.json()).then(data => {
-      if (!data.needsAuth) setGmailConnected(true)
-    }).catch(() => {})
   }, [])
 
   async function generate() {
