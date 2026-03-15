@@ -1,3 +1,47 @@
+const SCRAPE_SOURCES = [
+  { name: "OpenAI News", url: "https://openai.com/news" },
+  { name: "Anthropic News", url: "https://www.anthropic.com/news" },
+  { name: "Google Gemini Blog", url: "https://blog.google/products-and-platforms/products/gemini/" },
+  { name: "TechCrunch AI", url: "https://techcrunch.com/tag/artificial-intelligence/" },
+  { name: "MIT Tech Review", url: "https://www.technologyreview.com/topic/artificial-intelligence/" },
+  { name: "The Verge AI", url: "https://www.theverge.com/ai-artificial-intelligence" },
+  { name: "Ben Evans", url: "https://www.ben-evans.com/benedictevans" },
+]
+
+async function scrapeSource(source) {
+  try {
+    const controller = new AbortController()
+    const timeout = setTimeout(() => controller.abort(), 8000)
+    const res = await fetch(source.url, {
+      signal: controller.signal,
+      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; PavementPodcast/1.0)' }
+    })
+    clearTimeout(timeout)
+    if (!res.ok) return { name: source.name, content: null }
+    const html = await res.text()
+    const content = extractText(html, source.name)
+    return { name: source.name, content }
+  } catch {
+    return { name: source.name, content: null }
+  }
+}
+
+function extractText(html, sourceName) {
+  // Strip scripts, styles, nav, footer
+  let text = html
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, '')
+    .replace(/<nav[^>]*>[\s\S]*?<\/nav>/gi, '')
+    .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
+    .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
+    .replace(/<[^>]+>/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim()
+  
+  // Truncate to ~2000 chars to keep token usage reasonable
+  return text.substring(0, 2000)
+}
+
 export default async function handler(req, res) {
   if (req.method !== 'POST') {
     return res.status(405).json({ error: 'Method not allowed' })
@@ -5,10 +49,27 @@ export default async function handler(req, res) {
 
   const { sources, gmailSources, adhocItems, tone } = req.body
 
-  const sourceList = sources
-    .filter(s => s.on)
-    .map(s => `- ${s.name} (${s.url})`)
-    .join('\n')
+  // Determine which sources to scrape based on what's active
+  const activeSources = sources.filter(s => s.on)
+  const sourcesToScrape = SCRAPE_SOURCES.filter(s =>
+    activeSources.some(a => s.url.includes(a.url) || a.url.includes(s.name.toLowerCase().replace(/\s/g, '')))
+  )
+
+  // Scrape all active sources in parallel
+  const scraped = await Promise.all(
+    SCRAPE_SOURCES.filter(s =>
+      activeSources.some(a => s.name.toLowerCase().includes(a.name.toLowerCase().split(' ')[0].toLowerCase()))
+    ).map(scrapeSource)
+  )
+
+  const scrapedContent = scraped
+    .filter(s => s.content)
+    .map(s => `=== ${s.name} ===\n${s.content}`)
+    .join('\n\n')
+
+  const failedSources = scraped
+    .filter(s => !s.content)
+    .map(s => s.name)
 
   const gmailList = gmailSources
     .filter(s => s.on)
@@ -27,28 +88,31 @@ export default async function handler(req, res) {
 
 TODAY: ${today}
 
-ACTIVE WEB SOURCES:
-${sourceList || 'None'}
+LIVE SCRAPED CONTENT FROM WEB SOURCES:
+${scrapedContent || 'No web content available today.'}
 
-ACTIVE GMAIL NEWSLETTERS:
+${failedSources.length > 0 ? `NOTE: These sources could not be scraped today: ${failedSources.join(', ')}` : ''}
+
+GMAIL NEWSLETTERS CONFIGURED (not yet connected — coming soon):
 ${gmailList || 'None'}
 
-AD HOC ITEMS:
+AD HOC ITEMS ADDED TODAY:
 ${adhocList || 'None'}
 
 TASK:
-Write a spoken editorial briefing script covering the most important developments in AI and tech today. Draw on your knowledge of what these specific publications and newsletters typically cover and their recent reporting beats.
+Write a spoken editorial briefing script based ONLY on the actual content provided above. Do not invent stories or reference events not present in the scraped content. If a source had no content, skip it. Focus on what's real and current.
 
 TONE: ${tone}
 
 FORMAT RULES:
 - Open with a single punchy sentence — no "welcome" or "hello"
-- Cover 4-5 distinct stories or themes
+- Cover 4-5 distinct stories drawn from the actual scraped content
 - For each: state what happened, then deliver a clear "here's why it matters" take
 - End with a 2-sentence forward-looking close
 - Write as natural spoken word — short sentences, no bullet points, no markdown
 - Target 400-450 words (about 3 minutes spoken)
 - No headers, no asterisks, no formatting — pure spoken script
+- If there is not enough real content to fill 4-5 stories, cover fewer stories rather than inventing content
 
 Then after the script, on a new line write exactly:
 ---NOTEBOOKLM---
@@ -80,7 +144,8 @@ And rewrite the same briefing optimized for NotebookLM input: add source attribu
 
     return res.status(200).json({
       brief: parts[0].trim(),
-      notebooklm: parts[1]?.trim() || fullText
+      notebooklm: parts[1]?.trim() || fullText,
+      scraped: scraped.map(s => ({ name: s.name, success: !!s.content }))
     })
 
   } catch (err) {
