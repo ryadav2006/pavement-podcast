@@ -11,7 +11,7 @@ const SCRAPE_SOURCES = [
 const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000
 
 function isRecent(dateStr) {
-  if (!dateStr) return null // unknown date — let Claude decide
+  if (!dateStr) return null
   const parsed = new Date(dateStr)
   if (isNaN(parsed)) return null
   return (Date.now() - parsed.getTime()) < FORTY_EIGHT_HOURS
@@ -50,7 +50,6 @@ function extractRSS(xml, sourceName) {
                   item.match(/<description>([\s\S]*?)<\/description>/))?.[1] || ''
     const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]?.trim() || ''
     const recent = isRecent(pubDate)
-
     if (title) {
       const ageTag = recent === true ? '[FRESH]' : recent === false ? '[STALE - SKIP]' : '[DATE UNKNOWN]'
       const cleanDesc = desc.replace(/<[^>]+>/g, '').substring(0, 200)
@@ -69,7 +68,6 @@ function extractHTML(html, sourceName) {
     .replace(/<footer[^>]*>[\s\S]*?<\/footer>/gi, '')
     .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
 
-  // Extract dates near headlines to tag freshness
   const headlines = []
   const headlineRegex = /<h[123][^>]*>([\s\S]*?)<\/h[123]>/gi
   let match
@@ -77,7 +75,6 @@ function extractHTML(html, sourceName) {
   while ((match = headlineRegex.exec(text)) !== null && count < 12) {
     const headline = match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
     if (headline.length > 15 && headline.length < 200) {
-      // Look for a date in nearby HTML (within 500 chars after headline)
       const nearby = text.substring(match.index, match.index + 500)
       const dateMatch = nearby.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s+\d{4}\b/i) ||
                         nearby.match(/\b\d{4}-\d{2}-\d{2}\b/) ||
@@ -90,7 +87,6 @@ function extractHTML(html, sourceName) {
     }
   }
 
-  // Article excerpts
   const articles = []
   const articleRegex = /<article[^>]*>([\s\S]*?)<\/article>/gi
   count = 0
@@ -112,10 +108,10 @@ export default async function handler(req, res) {
     return res.status(405).json({ error: 'Method not allowed' })
   }
 
-  const { sources, gmailSources, adhocItems, tone } = req.body
+  const { sources, gmailSources, gmailContent, adhocItems, tone } = req.body
 
+  // Scrape web sources in parallel
   const scraped = await Promise.all(SCRAPE_SOURCES.map(scrapeSource))
-
   const successfulScrapes = scraped.filter(s => s.content)
   const failedSources = scraped.filter(s => !s.content).map(s => s.name)
 
@@ -123,14 +119,16 @@ export default async function handler(req, res) {
     .map(s => `=== ${s.name} ===\n${s.content}`)
     .join('\n\n')
 
-  const gmailList = gmailSources
-    .filter(s => s.on)
-    .map(s => `- ${s.name}`)
-    .join('\n')
+  // Format Gmail newsletter content
+  const gmailContentFormatted = gmailContent && gmailContent.length > 0
+    ? gmailContent.map(email =>
+        `=== ${email.sender} — "${email.subject}" (${email.date}) ===\n${email.body}`
+      ).join('\n\n')
+    : null
 
-  const adhocList = adhocItems
-    .map(s => `- ${s.label}: ${s.content}`)
-    .join('\n')
+  const adhocList = adhocItems && adhocItems.length > 0
+    ? adhocItems.map(s => `- ${s.label}: ${s.content}`).join('\n')
+    : null
 
   const today = new Date().toLocaleDateString('en-US', {
     weekday: 'long', month: 'long', day: 'numeric', year: 'numeric'
@@ -140,32 +138,37 @@ export default async function handler(req, res) {
 
 TODAY: ${today}
 
-LIVE SCRAPED CONTENT — YOUR ONLY SOURCE OF TRUTH:
-${scrapedContent || 'No content scraped today.'}
+LIVE SCRAPED WEB CONTENT — PRIMARY SOURCE:
+${scrapedContent || 'No web content scraped today.'}
 
-${adhocList ? `AD HOC ITEMS FROM USER:\n${adhocList}\n` : ''}
-${failedSources.length > 0 ? `FAILED SOURCES (do not reference): ${failedSources.join(', ')}\n` : ''}
+${gmailContentFormatted ? `LIVE GMAIL NEWSLETTER CONTENT — SECONDARY SOURCE:\n${gmailContentFormatted}` : 'GMAIL: Not connected or no recent newsletters found.'}
 
-CRITICAL RULES — READ CAREFULLY:
-1. Only discuss stories explicitly present in the scraped content above
+${adhocList ? `AD HOC ITEMS FROM USER:\n${adhocList}` : ''}
+
+${failedSources.length > 0 ? `FAILED SOURCES (do not reference): ${failedSources.join(', ')}` : ''}
+
+CRITICAL RULES:
+1. Only discuss stories explicitly present in the content above
 2. Items tagged [STALE - SKIP] are older than 48 hours — do NOT include them
-3. Items tagged [FRESH] are within the last 48 hours — prioritize these
-4. Items tagged [DATE UNKNOWN] — use editorial judgment, include only if highly newsworthy
-5. Do NOT invent any specific names, numbers, product names, or company announcements not present in the content
-6. Do NOT use your training data to fill gaps
-7. When referencing a person, use their full name as it appears in the content — never abbreviate or guess
-8. If fewer than 3 fresh stories exist, note this is a lighter news day and cover what's available
-9. Every factual claim must be directly traceable to the scraped content above
+3. Items tagged [FRESH] are within 48 hours — prioritize these
+4. Items tagged [DATE UNKNOWN] — include only if highly newsworthy
+5. Do NOT invent specific names, numbers, product names, or announcements not in the content
+6. Do NOT use training data to fill gaps
+7. Always use full names — never abbreviate (e.g. "Pete Hegseth" not "Pete")
+8. If fewer than 3 fresh stories exist, open with "Lighter news day today —"
+9. Every factual claim must be traceable to the content above
+10. Gmail newsletters are real content from today's inbox — treat them as high-signal primary sources
 
 TONE: ${tone}
 
-FORMAT:
+FORMAT — TARGET 15-20 MINUTES SPOKEN (approximately 2000-2500 words):
 - Single punchy opening sentence — no "welcome"
-- Cover only [FRESH] and [DATE UNKNOWN] stories
-- For each: what happened + why it matters editorially
-- If fewer than 3 fresh stories: open with "Lighter news day today —" and cover what's real
-- 2-sentence forward-looking close
-- Natural spoken word, 350-450 words, no markdown, no bullets
+- Cover 8-12 distinct stories or themes drawn from the content
+- For each story: what happened (2-3 sentences) + why it matters editorially (3-4 sentences of analysis)
+- Group related stories thematically where natural
+- End with a 3-4 sentence forward-looking close with your sharpest take
+- Natural spoken word — varied sentence length, rhetorical questions welcome, no bullet points, no markdown
+- If lighter news day: cover fewer stories but go deeper on each
 
 After the script write exactly:
 ---NOTEBOOKLM---
@@ -181,7 +184,7 @@ Same briefing for NotebookLM: source attributions in brackets after each claim, 
       },
       body: JSON.stringify({
         model: 'claude-sonnet-4-20250514',
-        max_tokens: 2000,
+        max_tokens: 4000,
         messages: [{ role: 'user', content: prompt }]
       })
     })
