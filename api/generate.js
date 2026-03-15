@@ -1,11 +1,11 @@
 const SCRAPE_SOURCES = [
-  { name: "OpenAI News", url: "https://openai.com/blog/rss.xml", type: "rss", deep: true },
-  { name: "Anthropic News", url: "https://www.anthropic.com/news", type: "html", deep: true },
-  { name: "Google Gemini Blog", url: "https://blog.google/products-and-platforms/products/gemini/", type: "html", deep: true },
-  { name: "TechCrunch AI", url: "https://techcrunch.com/tag/artificial-intelligence/", type: "html", deep: true },
-  { name: "MIT Tech Review", url: "https://www.technologyreview.com/topic/artificial-intelligence/", type: "html", deep: true },
-  { name: "The Verge AI", url: "https://www.theverge.com/ai-artificial-intelligence", type: "html", deep: true },
-  { name: "Ben Evans", url: "https://www.ben-evans.com/benedictevans", type: "html", deep: true },
+  { name: "OpenAI News", url: "https://openai.com/blog/rss.xml", type: "rss" },
+  { name: "Anthropic News", url: "https://www.anthropic.com/news", type: "html" },
+  { name: "Google Gemini Blog", url: "https://blog.google/products-and-platforms/products/gemini/", type: "html" },
+  { name: "TechCrunch AI", url: "https://techcrunch.com/tag/artificial-intelligence/", type: "html" },
+  { name: "MIT Tech Review", url: "https://www.technologyreview.com/topic/artificial-intelligence/", type: "html" },
+  { name: "The Verge AI", url: "https://www.theverge.com/ai-artificial-intelligence", type: "html" },
+  { name: "Ben Evans", url: "https://www.ben-evans.com/benedictevans", type: "html" },
 ]
 
 const FORTY_EIGHT_HOURS = 48 * 60 * 60 * 1000
@@ -33,6 +33,21 @@ async function fetchWithTimeout(url, timeout = 8000) {
   }
 }
 
+function extractPublishDate(html) {
+  const patterns = [
+    /publishedTime":\s*"([^"]+)"/,
+    /datePublished":\s*"([^"]+)"/,
+    /<time[^>]+datetime="([^"]+)"/,
+    /published_time"\s+content="([^"]+)"/,
+    /"dateModified":"([^"]+)"/,
+  ]
+  for (const pattern of patterns) {
+    const match = html.match(pattern)
+    if (match?.[1]) return match[1]
+  }
+  return null
+}
+
 function extractArticleText(html) {
   let text = html
     .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, '')
@@ -42,7 +57,6 @@ function extractArticleText(html) {
     .replace(/<header[^>]*>[\s\S]*?<\/header>/gi, '')
     .replace(/<aside[^>]*>[\s\S]*?<\/aside>/gi, '')
 
-  // Try article tag first
   const articleMatch = text.match(/<article[^>]*>([\s\S]*?)<\/article>/i)
   if (articleMatch) {
     return articleMatch[1]
@@ -52,7 +66,6 @@ function extractArticleText(html) {
       .substring(0, 3000)
   }
 
-  // Try main tag
   const mainMatch = text.match(/<main[^>]*>([\s\S]*?)<\/main>/i)
   if (mainMatch) {
     return mainMatch[1]
@@ -62,7 +75,6 @@ function extractArticleText(html) {
       .substring(0, 3000)
   }
 
-  // Fallback: strip all tags
   return text
     .replace(/<[^>]+>/g, ' ')
     .replace(/\s+/g, ' ')
@@ -78,21 +90,20 @@ function extractLinks(html, baseUrl) {
     let href = match[1]
     const text = match[2].replace(/<[^>]+>/g, '').trim()
 
-    // Skip non-article links
     if (!href || href.startsWith('#') || href.startsWith('mailto:') ||
         href.includes('twitter.com') || href.includes('facebook.com') ||
         href.includes('login') || href.includes('subscribe') ||
         href.includes('account') || text.length < 10) continue
 
-    // Make absolute
     if (href.startsWith('/')) {
-      const base = new URL(baseUrl)
-      href = `${base.protocol}//${base.host}${href}`
+      try {
+        const base = new URL(baseUrl)
+        href = `${base.protocol}//${base.host}${href}`
+      } catch { continue }
     } else if (!href.startsWith('http')) {
       continue
     }
 
-    // Only same domain
     try {
       const linkDomain = new URL(href).hostname
       const baseDomain = new URL(baseUrl).hostname
@@ -106,34 +117,31 @@ function extractLinks(html, baseUrl) {
 
 async function deepScrapeSource(source) {
   try {
-    // Step 1: fetch the index page
     const res = await fetchWithTimeout(source.url, 10000)
     if (!res.ok) return { name: source.name, content: null }
     const html = await res.text()
 
-    let indexContent = ''
-    let articleContents = []
-
+    // Handle RSS separately
     if (source.type === 'rss') {
-      // For RSS: extract items with full descriptions
       const items = []
       const itemRegex = /<item>([\s\S]*?)<\/item>/gi
       let match
       let count = 0
-      while ((match = itemRegex.exec(html)) !== null && count < 8) {
+      while ((match = itemRegex.exec(html)) !== null && count < 10) {
         const item = match[1]
         const title = (item.match(/<title><!\[CDATA\[(.*?)\]\]><\/title>/) ||
                        item.match(/<title>(.*?)<\/title>/))?.[1]?.trim() || ''
         const desc = (item.match(/<description><!\[CDATA\[([\s\S]*?)\]\]><\/description>/) ||
                       item.match(/<description>([\s\S]*?)<\/description>/))?.[1] || ''
         const pubDate = item.match(/<pubDate>(.*?)<\/pubDate>/)?.[1]?.trim() || ''
-        const link = item.match(/<link>(.*?)<\/link>/)?.[1]?.trim() || ''
         const recent = isRecent(pubDate)
 
+        // STRICT: skip stale items entirely
+        if (recent === false) continue
+
         if (title) {
-          const ageTag = recent === true ? '[FRESH]' : recent === false ? '[STALE - SKIP]' : '[DATE UNKNOWN]'
           const cleanDesc = desc.replace(/<[^>]+>/g, '').substring(0, 500)
-          items.push(`${ageTag} ${title} | ${pubDate}\n${cleanDesc}`)
+          items.push(`[FRESH] ${title}\nPublished: ${pubDate}\n${cleanDesc}`)
           count++
         }
       }
@@ -143,71 +151,86 @@ async function deepScrapeSource(source) {
       }
     }
 
-    // Step 2: extract headlines and links from index
-    const headlines = []
+    // HTML: extract headlines with dates
+    const freshHeadlines = []
+    const unknownHeadlines = []
     const headlineRegex = /<h[123][^>]*>([\s\S]*?)<\/h[123]>/gi
     let match
-    let count = 0
-    while ((match = headlineRegex.exec(html)) !== null && count < 15) {
+    while ((match = headlineRegex.exec(html)) !== null) {
       const headline = match[1].replace(/<[^>]+>/g, '').replace(/\s+/g, ' ').trim()
-      if (headline.length > 15 && headline.length < 200) {
-        const nearby = html.substring(match.index, match.index + 500)
-        const dateMatch = nearby.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s+\d{4}\b/i) ||
-                          nearby.match(/\b\d{4}-\d{2}-\d{2}\b/) ||
-                          nearby.match(/datetime="([^"]+)"/)
-        const dateStr = dateMatch?.[1] || dateMatch?.[0] || null
-        const recent = isRecent(dateStr)
-        const ageTag = recent === true ? '[FRESH]' : recent === false ? '[STALE - SKIP]' : '[DATE UNKNOWN]'
-        headlines.push({ text: `${ageTag} ${headline}${dateStr ? ` | ${dateStr}` : ''}`, recent, index: match.index })
-        count++
+      if (headline.length < 15 || headline.length > 200) continue
+
+      const nearby = html.substring(match.index, match.index + 600)
+      const dateMatch = nearby.match(/\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\w*\.?\s+\d{1,2},?\s+\d{4}\b/i) ||
+                        nearby.match(/\b\d{4}-\d{2}-\d{2}\b/) ||
+                        nearby.match(/datetime="([^"]+)"/)
+      const dateStr = dateMatch?.[1] || dateMatch?.[0] || null
+      const recent = isRecent(dateStr)
+
+      // STRICT: skip stale headlines entirely
+      if (recent === false) continue
+
+      if (recent === true) {
+        freshHeadlines.push({ text: headline, dateStr, index: match.index })
+      } else {
+        unknownHeadlines.push({ text: headline, dateStr, index: match.index })
       }
     }
 
-    indexContent = headlines.map(h => h.text).join('\n')
+    // Use fresh headlines, fall back to unknown only if no fresh ones found
+    const headlinesToUse = freshHeadlines.length > 0
+      ? freshHeadlines.slice(0, 10)
+      : unknownHeadlines.slice(0, 5)
 
-    // Step 3: find fresh article links and deep fetch them
+    if (headlinesToUse.length === 0) {
+      return { name: source.name, content: null }
+    }
+
+    const headlineText = headlinesToUse
+      .map(h => `${freshHeadlines.includes(h) ? '[FRESH]' : '[DATE UNKNOWN]'} ${h.text}${h.dateStr ? ` | ${h.dateStr}` : ''}`)
+      .join('\n')
+
+    // Only fetch article links for FRESH headlines
     const links = extractLinks(html, source.url)
-    const freshHeadlines = headlines.filter(h => h.recent === true || h.recent === null)
-
-    // Match links to fresh headlines and fetch top 4
-    const articleLinks = links
-      .filter(l => freshHeadlines.some(h =>
-        h.text.toLowerCase().includes(l.text.toLowerCase().substring(0, 20)) ||
-        l.text.length > 20
-      ))
+    const articlesToFetch = links
+      .filter(l => l.text.length > 20)
       .slice(0, 4)
 
     const articleFetches = await Promise.allSettled(
-      articleLinks.map(async (link) => {
+      articlesToFetch.map(async (link) => {
         try {
           const articleRes = await fetchWithTimeout(link.href, 8000)
           if (!articleRes.ok) return null
           const articleHtml = await articleRes.text()
-          const articleText = extractArticleText(articleHtml)
 
-          // Extract date from article
-          const dateMatch = articleHtml.match(/publishedTime":\s*"([^"]+)"/) ||
-                            articleHtml.match(/datePublished":\s*"([^"]+)"/) ||
-                            articleHtml.match(/<time[^>]+datetime="([^"]+)"/)
-          const pubDate = dateMatch?.[1] || null
+          // Check publish date of the article itself
+          const pubDate = extractPublishDate(articleHtml)
           const recent = isRecent(pubDate)
 
-          if (recent === false) return null // Skip stale articles
+          // STRICT: if we can confirm it's stale, skip it
+          if (recent === false) return null
 
-          return `--- Article: ${link.text} ---\n${pubDate ? `Published: ${pubDate}\n` : ''}${articleText}`
+          const articleText = extractArticleText(articleHtml)
+          const dateLabel = pubDate
+            ? `Published: ${new Date(pubDate).toLocaleDateString('en-US', {weekday:'short', month:'short', day:'numeric', year:'numeric'})}`
+            : 'Published: Date unknown'
+
+          return `--- ${link.text} ---\n${dateLabel}\n${articleText}`
         } catch {
           return null
         }
       })
     )
 
-    articleContents = articleFetches
+    const articleContents = articleFetches
       .filter(r => r.status === 'fulfilled' && r.value)
       .map(r => r.value)
 
     const combined = [
-      `${source.name} — Headlines:\n${indexContent}`,
-      articleContents.length > 0 ? `\n${source.name} — Full Articles:\n${articleContents.join('\n\n')}` : ''
+      `${source.name} — Recent Headlines:\n${headlineText}`,
+      articleContents.length > 0
+        ? `\n${source.name} — Full Article Content:\n${articleContents.join('\n\n')}`
+        : ''
     ].join('')
 
     return { name: source.name, content: combined || null }
@@ -224,7 +247,6 @@ export default async function handler(req, res) {
 
   const { sources, gmailSources, gmailContent, adhocItems, tone } = req.body
 
-  // Deep scrape all sources in parallel
   const scraped = await Promise.all(SCRAPE_SOURCES.map(deepScrapeSource))
   const successfulScrapes = scraped.filter(s => s.content)
   const failedSources = scraped.filter(s => !s.content).map(s => s.name)
@@ -235,7 +257,7 @@ export default async function handler(req, res) {
 
   const gmailContentFormatted = gmailContent && gmailContent.length > 0
     ? gmailContent.map(email =>
-        `=== ${email.sender} — "${email.subject}" (${email.date}) ===\n${email.body}`
+        `=== NEWSLETTER: ${email.sender} — "${email.subject}" (${email.date}) ===\n${email.body}`
       ).join('\n\n')
     : null
 
@@ -251,45 +273,39 @@ export default async function handler(req, res) {
 
 TODAY: ${today}
 
-LIVE SCRAPED WEB CONTENT — PRIMARY SOURCE:
-${scrapedContent || 'No web content scraped today.'}
+LIVE SCRAPED WEB CONTENT:
+${scrapedContent || 'No fresh web content found today.'}
 
-${gmailContentFormatted ? `LIVE GMAIL NEWSLETTER CONTENT — SECONDARY SOURCE:\n${gmailContentFormatted}` : 'GMAIL: Not connected or no recent newsletters found.'}
+${gmailContentFormatted ? `LIVE GMAIL NEWSLETTERS:\n${gmailContentFormatted}` : 'GMAIL: Not connected or no recent newsletters.'}
 
-${adhocList ? `AD HOC ITEMS FROM USER:\n${adhocList}` : ''}
+${adhocList ? `AD HOC ITEMS:\n${adhocList}` : ''}
 
-${failedSources.length > 0 ? `FAILED SOURCES (do not reference): ${failedSources.join(', ')}` : ''}
+${failedSources.length > 0 ? `SOURCES WITH NO FRESH CONTENT TODAY: ${failedSources.join(', ')}` : ''}
 
-CRITICAL ANTI-HALLUCINATION RULES — FOLLOW EXACTLY:
-1. ONLY discuss stories explicitly present in the scraped content above
-2. Items tagged [STALE - SKIP] are older than 48 hours — do NOT include them
-3. Items tagged [FRESH] are within 48 hours — prioritize these
-4. Items tagged [DATE UNKNOWN] — include only if highly newsworthy
-5. NEVER invent specific names, numbers, product names, or announcements not present verbatim in the content
-6. NEVER use your training data to fill in background context — if the article doesn't explain it, don't explain it
-7. NEVER interpret or editorialize beyond what the article actually says — report facts first, then your take
-8. If an article gives partial information, report only what it says: "Anthropic issued a statement about X" NOT your interpretation of what X means historically
-9. Always use full names exactly as they appear in the content
-10. If you are uncertain whether a detail is in the scraped content or your training data, OMIT IT
-11. Gmail newsletters: include ONLY content related to AI, technology, business strategy, or policy — ignore lifestyle, sports, beauty, entertainment
-12. If fewer than 3 fresh stories exist, open with "Lighter news day today —"
-13. Every single factual claim must be directly traceable to the scraped content above — no exceptions
+CRITICAL RULES — NO EXCEPTIONS:
+1. Only report stories present in the content above
+2. Never use training data to fill gaps or add background context
+3. If an article gives partial information, report only what it says — do not interpret using outside knowledge
+4. Never invent names, numbers, dates, or product details not explicitly in the content
+5. Always use full names exactly as they appear in the content
+6. Gmail newsletters: only include AI, tech, business strategy, or policy content — skip lifestyle, sports, beauty, entertainment
+7. If a source has no fresh content today, skip it entirely — do not reference old stories from that source
+8. If fewer than 3 stories are available, open with "Lighter news day today —" and go deeper on what exists
+9. No markdown formatting — no bold, no headers, no asterisks — pure spoken word only
+10. Every factual claim must come directly from the scraped content above
 
 TONE: ${tone}
 
-FORMAT — TARGET 15-20 MINUTES SPOKEN (approximately 2000-2500 words):
-- Single punchy opening sentence — no "welcome"
-- Cover 6-8 distinct stories drawn ONLY from scraped content
-- For each story: quote or closely paraphrase what the article actually says (2-3 sentences), then your editorial "why it matters" take (3-4 sentences)
-- Clearly distinguish between FACT (from article) and TAKE (your analysis)
-- Group related stories thematically where natural
-- End with a 3-4 sentence forward-looking close
-- Natural spoken word, varied sentence length, no bullet points, no markdown
-- If lighter news day: cover fewer stories but go deeper on each
+FORMAT — TARGET 15-20 MINUTES SPOKEN (~2000-2500 words):
+- Single punchy opening sentence, no "welcome"
+- Cover 6-8 stories from fresh content only
+- Each story: facts from the article (2-3 sentences) then your editorial take (3-4 sentences)
+- Natural spoken word, no bullets, no markdown
+- 3-4 sentence forward-looking close
 
 After the script write exactly:
 ---NOTEBOOKLM---
-Same briefing for NotebookLM: source attributions in brackets after each claim, context note at top for ${today}, same editorial voice.`
+Same briefing for NotebookLM with source attributions in brackets and a context note at the top for ${today}.`
 
   try {
     const response = await fetch('https://api.anthropic.com/v1/messages', {
